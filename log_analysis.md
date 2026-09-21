@@ -167,3 +167,9 @@ The logs prove *that* things failed and roughly *when*, but not the underlying *
 
 In a running environment, these are exactly what we'd check next.
 
+## Conclusions and limits
+Three independent historical incidents, not one: (1) a fully unreachable backend container
+(connectivity), (2) redis/postgres timeouts under both backends (dependency), (3) a brief
+upstream-timeout burst (connectivity/latency). All 5xx counts fully reconcile against error.log
+and application.log evidence with no unexplained gap. Limits: root cause of the container
+outage and dependency slowness cannot be determined from these logs alone — see Q10.
