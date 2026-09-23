@@ -1,0 +1,39 @@
+name: BARQ CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Docker Compose syntax
+        run: docker compose -p barq-assessment config > /tmp/compose-config.txt
+
+      - name: Build and start environment
+        run: docker compose -p barq-assessment up --build -d
+
+      - name: Wait for application readiness
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/ready >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -p barq-assessment ps
+          exit 1
+
+      - name: Run unit tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Run deployment validation
+        run: python3 validate.py
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -p barq-assessment down
