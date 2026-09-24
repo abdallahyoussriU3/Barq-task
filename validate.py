@@ -9,9 +9,9 @@ import urllib.error
 import urllib.request
 
 PROJECT = os.getenv("COMPOSE_PROJECT_NAME", "barq-assessment")
-BASE_URL = os.getenv("APP_URL", "http://127.0.0.1:8080")
+BASE_URL = os.getenv("APP_URL", "http://127.0.0.1:8090")
 MAX_WAIT_SECONDS = int(os.getenv("VALIDATION_TIMEOUT_SECONDS", "60"))
-ALLOWLISTED_PUBLIC_PORTS = {"8080"}
+ALLOWLISTED_PUBLIC_PORTS = {"8090"}
 
 failures = []
 
@@ -198,9 +198,9 @@ def check_host_port_exposure():
         if not name or not ports:
             continue
         if name == "nginx":
-            if any(f"127.0.0.1:{port}" in ports or f"0.0.0.0:{port}" in ports for port in ["8080"]):
+            if any(f"127.0.0.1:{port}" in ports or f"0.0.0.0:{port}" in ports for port in ["8090"]):
                 continue
-            note("FAIL", f"Nginx is not bound to the permitted public port 8080: {ports}")
+            note("FAIL", f"Nginx is not bound to the permitted public port 8090: {ports}")
             ok = False
         elif "0.0.0.0:" in ports or "127.0.0.1:" in ports or ":" in ports:
             note("FAIL", f"Unexpected host port exposure for {name}: {ports}")
