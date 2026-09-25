@@ -38,6 +38,13 @@ jobs:
           docker compose -p barq-assessment ps
           exit 1
 
+      - name: Verify application containers listen on port 8080
+        run: |
+          for service in app-01 app-02 app-03; do
+            docker compose -p barq-assessment exec -T "$service" \
+              python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"
+          done
+
       - name: Run unit tests
         run: python3 -m unittest discover -s tests -v
 

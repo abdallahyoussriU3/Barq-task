@@ -12,6 +12,7 @@ PROJECT = os.getenv("COMPOSE_PROJECT_NAME", "barq-assessment")
 BASE_URL = os.getenv("APP_URL", "http://127.0.0.1:8090")
 MAX_WAIT_SECONDS = int(os.getenv("VALIDATION_TIMEOUT_SECONDS", "60"))
 ALLOWLISTED_PUBLIC_PORTS = {"8090"}
+APP_SERVICES = ["app-01", "app-02", "app-03"]
 
 failures = []
 
@@ -112,6 +113,22 @@ def check_postgres_and_redis_readiness():
     return ok
 
 
+def check_application_ports():
+    ok = True
+    for service_name in APP_SERVICES:
+        code, stdout, stderr = run_command([
+            "docker", "compose", "-p", PROJECT, "exec", "-T", service_name,
+            "python", "-c",
+            "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()",
+        ])
+        if code == 0:
+            note("PASS", f"{service_name} is serving health checks on port 8080")
+        else:
+            ok = False
+            note("FAIL", f"{service_name} is not serving on port 8080: {stderr or stdout}")
+    return ok
+
+
 def check_backend_identity():
     seen = set()
     for _ in range(12):
@@ -123,10 +140,10 @@ def check_backend_identity():
         if instance:
             seen.add(instance)
         time.sleep(0.5)
-    if {"app-01", "app-02"}.issubset(seen):
-        note("PASS", "Both backend instances responded through NGINX")
+    if set(APP_SERVICES).issubset(seen):
+        note("PASS", "All backend instances responded through NGINX")
         return True
-    note("FAIL", f"Expected both backends in /instance responses, saw {sorted(seen)}")
+    note("FAIL", f"Expected all backends in /instance responses, saw {sorted(seen)}")
     return False
 
 
@@ -169,7 +186,7 @@ def check_network_isolation():
         if "frontend" in stdout:
             ok = False
             note("FAIL", f"{service_name} is attached to the frontend network")
-    for service_name in ["app-01", "app-02", "nginx"]:
+    for service_name in APP_SERVICES + ["nginx"]:
         code, stdout, stderr = run_command(["docker", "inspect", "-f", "{{json .NetworkSettings.Networks}}", service_name])
         if code != 0:
             ok = False
@@ -178,10 +195,10 @@ def check_network_isolation():
         if service_name == "nginx" and "backend" in stdout:
             ok = False
             note("FAIL", "Nginx should not attach to the backend network")
-        if service_name in {"app-01", "app-02"} and "frontend" not in stdout:
+        if service_name in APP_SERVICES and "frontend" not in stdout:
             ok = False
             note("FAIL", f"{service_name} is missing the frontend network")
-        if service_name in {"app-01", "app-02"} and "backend" not in stdout:
+        if service_name in APP_SERVICES and "backend" not in stdout:
             ok = False
             note("FAIL", f"{service_name} is missing the backend network")
     return ok
@@ -198,7 +215,8 @@ def check_host_port_exposure():
         if not name or not ports:
             continue
         if name == "nginx":
-            if any(f"127.0.0.1:{port}" in ports or f"0.0.0.0:{port}" in ports for port in ["8090"]):
+            if any(f"127.0.0.1:{port}" in ports or f"0.0.0.0:{port}" in ports
+                   for port in ALLOWLISTED_PUBLIC_PORTS):
                 continue
             note("FAIL", f"Nginx is not bound to the permitted public port 8090: {ports}")
             ok = False
@@ -209,7 +227,7 @@ def check_host_port_exposure():
 
 
 def main():
-    if not all(docker_service_state(service) for service in ["postgres", "redis", "app-01", "app-02", "nginx"]):
+    if not all(docker_service_state(service) for service in ["postgres", "redis"] + APP_SERVICES + ["nginx"]):
         note("FAIL", "Not all required containers are running")
         print(f"FAIL: validation aborted because docker compose -p {PROJECT} is not healthy")
         return 1
@@ -218,6 +236,7 @@ def main():
         check_public_access,
         check_required_endpoints,
         check_postgres_and_redis_readiness,
+        check_application_ports,
         check_backend_identity,
         check_record_workflow,
         check_counter_workflow,
